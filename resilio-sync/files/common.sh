@@ -51,7 +51,9 @@ resilio_validate() {
 	printf '%s\n' "$webui_address" | awk -F. 'NF != 4 {exit 1} {for(i=1;i<=4;i++) if($i=="" || $i>255) exit 1}' || return 1
 	for port in "$webui_port" "$listening_port"; do
 		case "$port" in ''|*[!0-9]*) resilio_error 'Invalid port'; return 1 ;; esac
-		[ "$port" -ge 1024 ] && [ "$port" -le 65535 ] || { resilio_error 'Ports must be between 1024 and 65535'; return 1; }
+		if ! [ "$port" -ge 1024 ] || ! [ "$port" -le 65535 ]; then
+			resilio_error 'Ports must be between 1024 and 65535'; return 1;
+		fi
 	done
 	[ "$webui_port" != "$listening_port" ] || { resilio_error 'Web UI and transfer ports must differ'; return 1; }
 	for limit in "$download_limit" "$upload_limit"; do
@@ -72,8 +74,8 @@ resilio_mount_ready() {
 resilio_paths_ready() {
 	resilio_mount_ready || { resilio_error 'Expected writable ext4 filesystem is not mounted'; return 1; }
 	for path in "$state_dir" "$directory_root"; do
-		[ -d "$path" ] && [ "$(readlink -f "$path")" = "$path" ] || {
+		if [ ! -d "$path" ] || [ "$(readlink -f "$path")" != "$path" ]; then
 			resilio_error "Missing directory or symlink path: $path (run resilio-sync-setup)"; return 1;
-		}
+		fi
 	done
 }

@@ -25,9 +25,9 @@ case "${1:-status}" in
 	install)
 		[ "$(id -u)" = 0 ] || { echo 'Run as root' >&2; exit 1; }
 		[ "$(uname -m)" = aarch64 ] || { echo 'Only ARM64 is supported' >&2; exit 1; }
-		[ -x "$COMPAT_LIB_DIR/ld-linux-aarch64.so.1" ] && [ -e "$COMPAT_LIB_DIR/libcrypt.so.1" ] || {
+		if [ ! -x "$COMPAT_LIB_DIR/ld-linux-aarch64.so.1" ] || [ ! -e "$COMPAT_LIB_DIR/libcrypt.so.1" ]; then
 			echo 'Install glibc-compat and libxcrypt-glibc-compat first' >&2; exit 1;
-		}
+		fi
 		mkdir -p "$base"
 		exec 9>/var/lock/resilio-sync-runtime.lock
 		flock -n 9 || { echo 'Another installation is running' >&2; exit 1; }

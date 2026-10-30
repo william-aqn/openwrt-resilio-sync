@@ -4,16 +4,16 @@
 set -eu
 glibc_bison=${GLIBC_BISON:-$(command -v bison || true)}
 glibc_localedef=${GLIBC_LOCALEDEF:-$(command -v localedef || true)}
-[ -x "$glibc_bison" ] && [ -x "$glibc_localedef" ] || {
+if [ ! -x "$glibc_bison" ] || [ ! -x "$glibc_localedef" ]; then
 	echo 'Install GNU bison and localedef on the build host' >&2; exit 1;
-}
+fi
 repo=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 sdk=$(CDPATH='' cd -- "${1:?Pass the OpenWrt SDK directory}" && pwd)
 dist=${DIST_DIR:-"$repo/dist"}
 case "$dist" in /*) ;; *) echo 'DIST_DIR must be an absolute path' >&2; exit 1 ;; esac
-[ -f "$sdk/rules.mk" ] && [ -x "$sdk/scripts/feeds" ] || {
+if [ ! -f "$sdk/rules.mk" ] || [ ! -x "$sdk/scripts/feeds" ]; then
 	echo 'Not an OpenWrt SDK directory' >&2; exit 1;
-}
+fi
 cd "$sdk"
 ./scripts/feeds update base packages luci
 ./scripts/feeds install xz tar curl openssl jshn block-mount flock luci-base

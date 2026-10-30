@@ -3,10 +3,10 @@
 set -eu
 . /usr/lib/resilio-sync/runtime.conf
 base="/usr/lib/resilio-sync/vendor/$RUNTIME_ID"
-[ -x "$base/rslsync" ] && [ -x "$COMPAT_LIB_DIR/ld-linux-aarch64.so.1" ] && [ -e "$COMPAT_LIB_DIR/libcrypt.so.1" ] || {
+if [ ! -x "$base/rslsync" ] || [ ! -x "$COMPAT_LIB_DIR/ld-linux-aarch64.so.1" ] || [ ! -e "$COMPAT_LIB_DIR/libcrypt.so.1" ]; then
 	echo 'Runtime missing. Run: resilio-sync-runtime install' >&2
 	exit 1
-}
+fi
 unset LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT
 export LC_ALL=C.UTF-8
 export GCONV_PATH="$COMPAT_LIB_DIR/gconv"
