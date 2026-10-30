@@ -1,0 +1,84 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+# shellcheck disable=SC2154 # Variables are loaded by resilio_load.
+# OpenWrt's configuration helpers reference optional unset environment variables.
+set -e
+. /usr/lib/resilio-sync/common.sh
+[ "$(id -u)" = 0 ] || { resilio_error 'Run as root'; exit 1; }
+case "${1:-}" in ''|--password-stdin) ;; *) echo 'Usage: resilio-sync-setup [--password-stdin]' >&2; exit 2 ;; esac
+resilio_load
+resilio_validate
+resilio_mount_ready || { resilio_error 'Mount the configured ext4 disk before setup'; exit 1; }
+group=$(id -gn "$user")
+
+# Walk from the checked mount. Never follow a symlink while creating folders.
+make_directory() {
+	relative=${1#"$storage_mount"/}
+	current=$storage_mount
+	old_ifs=$IFS
+	IFS=/
+	for component in $relative; do
+		current="$current/$component"
+		[ ! -L "$current" ] || { resilio_error "Symlink rejected: $current"; exit 1; }
+		if [ ! -e "$current" ]; then
+			mkdir "$current"
+			chown "$user:$group" "$current"
+		fi
+		[ -d "$current" ] || { resilio_error "Not a directory: $current"; exit 1; }
+	done
+	IFS=$old_ifs
+}
+
+umask 077
+make_directory "$state_dir"
+make_directory "$directory_root"
+# Read only the numeric owner of one validated directory, not its filename.
+# shellcheck disable=SC2012
+[ "$(ls -nd "$state_dir" | awk '{print $3}')" = "$(id -u "$user")" ] || {
+	resilio_error 'Existing state is owned by another user; fix ownership deliberately'; exit 1;
+}
+chmod 700 "$state_dir"
+mkdir -p /etc/resilio-sync
+chmod 700 /etc/resilio-sync
+if [ ! -s /etc/resilio-sync/webui-password.hash ]; then
+	if [ "${1:-}" = --password-stdin ]; then
+		IFS= read -r password
+		# Accept the CRLF line ending emitted by Windows SSH pipelines.
+		carriage_return=$(printf '\r')
+		password=${password%"$carriage_return"}
+	else
+		[ -t 0 ] || { resilio_error 'Use a terminal or --password-stdin'; exit 1; }
+		trap 'stty echo' EXIT HUP INT TERM
+		printf 'Web UI password (at least 12 characters): ' >&2
+		stty -echo
+		IFS= read -r password
+		printf '\nRepeat password: ' >&2
+		IFS= read -r confirmation
+		stty echo
+		printf '\n' >&2
+		trap - EXIT HUP INT TERM
+		[ "$password" = "$confirmation" ] || { resilio_error 'Passwords do not match'; exit 1; }
+	fi
+	[ "${#password}" -ge 12 ] || { resilio_error 'Password must be at least 12 characters'; exit 1; }
+	printf '%s\n' "$password" | openssl passwd -6 -stdin > /etc/resilio-sync/webui-password.hash.new
+	mv /etc/resilio-sync/webui-password.hash.new /etc/resilio-sync/webui-password.hash
+	unset password confirmation
+fi
+if [ ! -s /etc/resilio-sync/server.crt ] || [ ! -s /etc/resilio-sync/server.key ]; then
+	san='DNS:localhost,IP:127.0.0.1'
+	for address in $(ip -4 -o addr show | awk '{split($4,a,"/"); print a[1]}'); do
+		case "$address" in *[!0-9.]*|'') continue ;; esac
+		san="$san,IP:$address"
+	done
+	openssl req -x509 -newkey rsa:2048 -sha256 -nodes -days 825 \
+		-subj '/CN=OpenWrt Resilio Sync' -addext "subjectAltName=$san" \
+		-keyout /etc/resilio-sync/server.key -out /etc/resilio-sync/server.crt
+fi
+resilio_paths_ready
+echo 'Setup complete. Existing credentials and data were preserved.'
+echo 'The UI uses HTTPS with a self-signed certificate.'
+echo 'Set the Web UI bind address in LuCI, then enable and start the service:'
+echo '  uci set resilio-sync.main.enabled=1'
+echo '  uci commit resilio-sync'
+echo '  /etc/init.d/resilio-sync enable'
+echo '  /etc/init.d/resilio-sync restart'

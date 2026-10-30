@@ -1,0 +1,40 @@
+name: Check integration
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shell syntax and validation
+        run: |
+          find resilio-sync/files scripts tests -type f ! -name '*.conf' ! -name '*.config' ! -name '*.py' ! -name '*.c' -print0 | xargs -0 -n1 sh -n
+          sh tests/test_validation.sh
+          shellcheck -s sh -e SC1091,SC2034,SC2317 resilio-sync/files/common.sh resilio-sync/files/rslsync resilio-sync/files/resilio-sync-runtime resilio-sync/files/resilio-sync-setup resilio-sync/files/resilio-sync-config scripts/*.sh tests/*.sh
+          node --check luci-app-resilio-sync/htdocs/luci-static/resources/view/resilio-sync/settings.js
+      - name: Check metadata and source hygiene
+        run: python3 tests/check_sources.py
+  sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install SDK prerequisites
+        run: sudo apt-get update && sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib gettext git libc-bin locales libncurses-dev libssl-dev python3-setuptools rsync swig unzip zlib1g-dev zstd
+      - name: Fetch pinned OpenWrt SDK
+        run: |
+          base=https://downloads.openwrt.org/releases/25.12.5/targets/mediatek/filogic
+          name=openwrt-sdk-25.12.5-mediatek-filogic_gcc-14.3.0_musl.Linux-x86_64.tar.zst
+          curl -fSL "$base/$name" -o "$name"
+          curl -fsSL "$base/sha256sums" -o sha256sums
+          grep -F "$name" sha256sums | sha256sum -c -
+          tar --zstd -xf "$name"
+      - name: Build integration packages
+        run: sh scripts/build-sdk.sh "$PWD/openwrt-sdk-25.12.5-mediatek-filogic_gcc-14.3.0_musl.Linux-x86_64"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openwrt-25.12.5-aarch64-cortex-a53
+          path: dist/

@@ -1,0 +1,10 @@
+{
+  "luci-app-resilio-sync": {
+    "description": "Configure the Resilio Sync service",
+    "read": {
+      "uci": ["resilio-sync"],
+      "ubus": { "service": ["list"] }
+    },
+    "write": { "uci": ["resilio-sync"] }
+  }
+}

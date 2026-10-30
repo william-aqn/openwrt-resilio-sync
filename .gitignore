@@ -1,0 +1,13 @@
+/dist/
+/build/
+*.apk
+*.ipk
+*.deb
+*.tar.gz
+*.tar.xz
+*.tar.zst
+*.pem
+*.key
+*.btskey
+*.hash
+__pycache__/

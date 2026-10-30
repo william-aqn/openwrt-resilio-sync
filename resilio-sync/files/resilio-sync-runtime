@@ -1,0 +1,58 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+set -eu
+. /usr/lib/resilio-sync/runtime.conf
+base=/usr/lib/resilio-sync/vendor
+target="$base/$RUNTIME_ID"
+stage=
+cleanup() { [ -z "$stage" ] || rm -rf "$stage"; }
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+
+fetch() {
+	curl --fail --location --proto '=https' --proto-redir '=https' \
+		--connect-timeout 20 --max-time 600 --retry 2 --output "$3" "$1"
+	printf '%s  %s\n' "$2" "$3" | sha256sum -c - || {
+		echo 'Checksum mismatch; installation aborted.' >&2; exit 1;
+	}
+}
+
+case "${1:-status}" in
+	status)
+		[ -x "$target/rslsync" ] || { echo 'Runtime is not installed'; exit 1; }
+		exec /usr/bin/rslsync --help
+		;;
+	install)
+		[ "$(id -u)" = 0 ] || { echo 'Run as root' >&2; exit 1; }
+		[ "$(uname -m)" = aarch64 ] || { echo 'Only ARM64 is supported' >&2; exit 1; }
+		[ -x "$COMPAT_LIB_DIR/ld-linux-aarch64.so.1" ] && [ -e "$COMPAT_LIB_DIR/libcrypt.so.1" ] || {
+			echo 'Install glibc-compat and libxcrypt-glibc-compat first' >&2; exit 1;
+		}
+		mkdir -p "$base"
+		exec 9>/var/lock/resilio-sync-runtime.lock
+		flock -n 9 || { echo 'Another installation is running' >&2; exit 1; }
+		if [ -x "$target/rslsync" ]; then
+			echo "Runtime $RUNTIME_ID is already installed"
+			exit 0
+		fi
+		[ ! -e "$target" ] || { echo 'Incomplete target exists; inspect it before retrying' >&2; exit 1; }
+		available=$(df -Pk "$base" | awk 'END {print $4}')
+		[ "$available" -ge 153600 ] || { echo 'At least 150 MiB of free storage is required' >&2; exit 1; }
+		umask 022
+		stage=$(mktemp -d "$base/.install.XXXXXX")
+		mkdir "$stage/app" "$stage/payload"
+		fetch "$RESILIO_URL" "$RESILIO_SHA256" "$stage/resilio.tar.gz"
+		tar -xzf "$stage/resilio.tar.gz" -C "$stage/app" rslsync LICENSE.TXT
+		cp "$stage/app/rslsync" "$stage/payload/rslsync"
+		cp "$stage/app/LICENSE.TXT" "$stage/payload/RESILIO-LICENSE.TXT"
+		cp /usr/lib/resilio-sync/runtime.conf "$stage/payload/inputs.conf"
+		chmod 755 "$stage/payload/rslsync"
+		"$COMPAT_LIB_DIR/ld-linux-aarch64.so.1" --inhibit-cache \
+			--library-path "$COMPAT_LIB_DIR" "$stage/payload/rslsync" --help > "$stage/help.txt"
+		grep -Fq 'Resilio Sync 3.1.2 (1076)' "$stage/help.txt" || { echo 'Unexpected executable version' >&2; exit 1; }
+		mv "$stage/payload" "$target"
+		echo "Installed Resilio Sync $RESILIO_VERSION; libraries are managed by OpenWrt packages."
+		echo 'Next: configure /etc/config/resilio-sync and run resilio-sync-setup.'
+		;;
+	*) echo 'Usage: resilio-sync-runtime [install|status]' >&2; exit 2 ;;
+esac

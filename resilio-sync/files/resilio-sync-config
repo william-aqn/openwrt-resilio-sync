@@ -1,0 +1,66 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+# shellcheck disable=SC2154 # Variables are loaded by resilio_load and the disk guard.
+# OpenWrt's configuration and JSON helpers do not support nounset mode.
+set -e
+. /usr/lib/resilio-sync/common.sh
+resilio_load
+resilio_validate
+
+case "${1:-check}" in
+	check) resilio_paths_ready; exit ;;
+	prepare) ;;
+	*) echo 'Usage: resilio-sync-config [check|prepare]' >&2; exit 2 ;;
+esac
+
+resilio_paths_ready
+[ "$(id -u)" = 0 ] || { resilio_error 'Run as root'; exit 1; }
+for required in webui-password.hash server.crt server.key; do
+	[ -s "/etc/resilio-sync/$required" ] || { resilio_error 'Credentials missing; run resilio-sync-setup'; exit 1; }
+done
+password_hash=$(cat /etc/resilio-sync/webui-password.hash)
+case "$password_hash" in \$6\$*) ;; *) resilio_error 'Invalid password hash'; exit 1 ;; esac
+group=$(id -gn "$user")
+runtime=/var/run/resilio-sync
+umask 077
+mkdir -p "$runtime"
+chown "root:$group" "$runtime"
+chmod 750 "$runtime"
+cp /etc/resilio-sync/server.crt "$runtime/server.crt"
+cp /etc/resilio-sync/server.key "$runtime/server.key"
+
+. /usr/share/libubox/jshn.sh
+json_init
+json_add_string device_name "$device_name"
+json_add_int listening_port "$listening_port"
+json_add_string storage_path "$state_dir"
+json_add_string pid_file "$state_dir/rslsync.pid"
+json_add_string directory_root "$directory_root"
+json_add_string directory_root_policy all
+json_add_boolean use_upnp "$use_upnp"
+json_add_boolean check_for_updates 0
+json_add_boolean send_statistics 0
+json_add_int worker_threads_count 2
+json_add_int direct_torrent_mem_limit 67108864
+json_add_int log_size 4
+json_add_int log_ttl 7
+json_add_int download_limit "$download_limit"
+json_add_int upload_limit "$upload_limit"
+json_add_object webui
+json_add_string listen "$webui_address:$webui_port"
+json_add_string login "$webui_login"
+json_add_string password_hash "$password_hash"
+json_add_boolean allow_empty_password 0
+json_add_boolean force_https 1
+json_add_string ssl_certificate "$runtime/server.crt"
+json_add_string ssl_private_key "$runtime/server.key"
+json_add_array dir_whitelist
+json_add_string '' "$directory_root"
+json_close_array
+json_close_object
+json_dump > "$runtime/config.json.new"
+chown "$user:$group" "$runtime/config.json.new" "$runtime/server.crt" "$runtime/server.key"
+chmod 600 "$runtime/config.json.new" "$runtime/server.key"
+chmod 644 "$runtime/server.crt"
+mv "$runtime/config.json.new" "$runtime/config.json"
+basename "$device" > "$runtime/device"

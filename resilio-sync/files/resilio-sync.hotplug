@@ -1,0 +1,33 @@
+#!/bin/sh
+# SPDX-License-Identifier: MIT
+[ -x /etc/init.d/resilio-sync ] || exit 0
+case "$ACTION" in
+	remove)
+		[ -r /var/run/resilio-sync/device ] || exit 0
+		read -r active_device < /var/run/resilio-sync/device
+		removed=${DEVNAME:-$DEVICENAME}
+		removed=${removed##*/}
+		case "$active_device" in
+			"$removed"|"${removed}"[0-9]*|"${removed}"p[0-9]*)
+				[ -n "$removed" ] && /etc/init.d/resilio-sync stop
+				;;
+		esac
+		;;
+	add)
+		[ "$(uci -q get resilio-sync.main.enabled)" = 1 ] || exit 0
+		(
+			exec 9>/var/lock/resilio-sync-hotplug.lock
+			flock -n 9 || exit 0
+			attempt=0
+			while [ "$attempt" -lt 15 ]; do
+				/etc/init.d/resilio-sync running && exit 0
+				if /usr/libexec/resilio-sync-config check >/dev/null 2>&1; then
+					/etc/init.d/resilio-sync start
+					exit 0
+				fi
+				attempt=$((attempt + 1))
+				sleep 2
+			done
+		) </dev/null >/dev/null 2>&1 &
+		;;
+esac

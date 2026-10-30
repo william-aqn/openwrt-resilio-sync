@@ -1,0 +1,8 @@
+{
+  "admin/services/resilio-sync": {
+    "title": "Resilio Sync",
+    "order": 60,
+    "action": { "type": "view", "path": "resilio-sync/settings" },
+    "depends": { "acl": ["luci-app-resilio-sync"], "uci": { "resilio-sync": true } }
+  }
+}
