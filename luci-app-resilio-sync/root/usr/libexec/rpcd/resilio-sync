@@ -1,0 +1,51 @@
+#!/usr/bin/ucode
+// SPDX-License-Identifier: MIT
+// rpcd exec plugin: set_password is granted only by the write ACL.
+import { stdin, popen } from 'fs';
+
+if (ARGV[0] == 'list') {
+	print('{"set_password":{"password":""}}\n');
+	exit(0);
+}
+if (ARGV[0] != 'call' || ARGV[1] != 'set_password')
+	exit(1);
+
+function reply(ok, code, reloading) {
+	printf('%J\n', { ok, code, reloading: !!reloading });
+	exit(0);
+}
+
+let raw = stdin.read(4097);
+if (raw == null || length(raw) > 4096)
+	reply(false, 'invalid_password');
+let request;
+try { request = json(raw); }
+catch (e) { reply(false, 'invalid_password'); }
+raw = null;
+let password = request?.password;
+let printable = type(password) == 'string' ? match(password, /^[\x20-\x7e]{12,128}$/) : null;
+// POSIX regex stops at NUL; require the match to consume every input byte.
+if (!printable || length(printable[0]) != length(password))
+	reply(false, 'invalid_password');
+
+// A constant command and stdin keep the password out of argv and shell syntax.
+let process = popen('/usr/sbin/resilio-sync-password --password-stdin 2>/dev/null', 'w');
+if (!process)
+	reply(false, 'save_failed');
+let written = process.write(password + '\n');
+let expected = length(password) + 1;
+password = null;
+request = null;
+let status = process.close();
+if (written != expected)
+	reply(false, 'save_failed');
+switch (status) {
+case 0: reply(true, 'saved', true);
+case 10: reply(true, 'saved', false);
+case 2: reply(false, 'invalid_password');
+case 3: reply(false, 'setup_required');
+case 4: reply(false, 'busy');
+case 6: reply(false, 'reload_failed');
+case 7: reply(false, 'rollback_failed');
+default: reply(false, 'save_failed');
+}

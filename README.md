@@ -18,7 +18,7 @@ Installing the integration does not accept a Resilio license or activate Sync.
 | Package | Purpose |
 | --- | --- |
 | `resilio-sync` | Service, UCI configuration, runtime installer and setup tool |
-| `luci-app-resilio-sync` | Services → Resilio Sync settings and service status |
+| `luci-app-resilio-sync` | Services → Resilio Sync settings, password reset and service status |
 | `glibc-compat` | GNU libc 2.44, C.UTF-8 locale and conversion modules |
 | `libxcrypt-glibc-compat` | libxcrypt 4.5.2 built against the private glibc |
 
@@ -48,7 +48,7 @@ resilio-sync-setup
 ```
 
 The service is disabled by default and the UI initially binds to localhost.
-Setup requires an already mounted disk, refuses to run as root, creates a
+Setup requires an already mounted disk, refuses to use root as the service account, creates a
 hashed password and a self-signed TLS certificate, and prints the next steps.
 It does not open firewall ports. Follow the installation guide to enable LAN
 access and start the service.

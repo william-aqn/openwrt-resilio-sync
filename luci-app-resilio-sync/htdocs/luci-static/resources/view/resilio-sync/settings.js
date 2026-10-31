@@ -4,10 +4,67 @@
 'require rpc';
 'require uci';
 'require poll';
+'require ui';
 
 var callServiceList = rpc.declare({
 	object: 'service', method: 'list', params: ['name'], expect: { '': {} }
 });
+var callSetPassword = rpc.declare({
+	object: 'resilio-sync', method: 'set_password', params: ['password'], expect: { '': {} }
+});
+
+function changePassword() {
+	var password = E('input', { 'id': 'resilio-new-password', 'type': 'password', 'autocomplete': 'new-password', 'maxlength': 128, 'class': 'cbi-input-password' });
+	var confirmation = E('input', { 'id': 'resilio-confirm-password', 'type': 'password', 'autocomplete': 'new-password', 'maxlength': 128, 'class': 'cbi-input-password' });
+	var error = E('p', { 'class': 'error', 'role': 'alert' });
+	var cancel = E('button', { 'class': 'btn', 'click': function() { password.value = confirmation.value = ''; ui.hideModal(); } }, _('Cancel'));
+	var save = E('button', { 'class': 'btn cbi-button-positive', 'click': function() {
+		error.textContent = '';
+		if (password.value.length < 12 || password.value.length > 128 || /[^\x20-\x7e]/.test(password.value)) {
+			error.textContent = _('Use 12 to 128 characters: English letters, numbers, symbols or spaces.');
+			return;
+		}
+		if (password.value !== confirmation.value) {
+			error.textContent = _('Passwords do not match.');
+			return;
+		}
+		save.disabled = cancel.disabled = true;
+		password.disabled = confirmation.disabled = true;
+		return callSetPassword(password.value).then(function(result) {
+			password.value = confirmation.value = '';
+			if (!result.ok) {
+				var messages = {
+					invalid_password: _('Use 12 to 128 characters: English letters, numbers, symbols or spaces.'),
+					setup_required: _('Complete initial setup over SSH before changing the password.'),
+					busy: _('Another password change is in progress. Try again.'),
+					reload_failed: _('The service could not reload. The previous password was restored. Check the service settings.'),
+					rollback_failed: _('The service could not reload or restore the previous password. Check storage and credentials over SSH.'),
+					save_failed: _('The password could not be saved. Check free space and file permissions.')
+				};
+				error.textContent = messages[result.code] || _('The password could not be changed.');
+				return;
+			}
+			ui.hideModal();
+			ui.addNotification(null, E('p', {}, result.reloading
+				? _('Password changed. Resilio is reloading; sign in to its web UI with the new password.')
+				: _('Password changed. It will be used when Resilio starts. The service remains stopped.')), 'info');
+		}).catch(function() {
+			password.value = confirmation.value = '';
+			error.textContent = _('No confirmation was received. Check whether the new password works before trying again.');
+		}).finally(function() {
+			save.disabled = cancel.disabled = false;
+			password.disabled = confirmation.disabled = false;
+		});
+	} }, _('Change password'));
+	ui.showModal(_('Change Resilio web UI password'), [
+		E('p', {}, _('You do not need the old Resilio password. This takes effect immediately and briefly restarts a running Resilio service. Save and apply other settings first.')),
+		E('p', {}, [E('label', { 'for': 'resilio-new-password' }, _('New password')), E('br'), password]),
+		E('p', {}, [E('label', { 'for': 'resilio-confirm-password' }, _('Repeat password')), E('br'), confirmation]),
+		error,
+		E('div', { 'class': 'right' }, [cancel, ' ', save])
+	]);
+	password.focus();
+}
 
 function isRunning(data) {
 	var service = data['resilio-sync'];
@@ -54,8 +111,13 @@ return view.extend({
 		o.datatype = 'range(1024,65535)';
 		o.default = 8888;
 		o.rmempty = false;
-		o = s.taboption('network', form.Value, 'webui_login', _('Web UI username'), _('The password is stored outside UCI. Use resilio-sync-setup to create credentials.'));
+		o = s.taboption('network', form.Value, 'webui_login', _('Web UI username'));
 		o.rmempty = false;
+		o = s.taboption('network', form.Button, '_change_password', _('Web UI password'), _('Set a new password even if you forgot the old one. Only its hash is stored; the current password cannot be displayed.'));
+		o.inputtitle = _('Change password');
+		o.inputstyle = 'apply';
+		o.onclick = changePassword;
+		o.write = function() {};
 		o = s.taboption('network', form.Value, 'listening_port', _('File transfer port'));
 		o.datatype = 'range(1024,65535)';
 		o.default = 55555;

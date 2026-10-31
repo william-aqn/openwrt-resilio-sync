@@ -5,6 +5,9 @@
       "uci": ["resilio-sync"],
       "ubus": { "service": ["list"] }
     },
-    "write": { "uci": ["resilio-sync"] }
+    "write": {
+      "uci": ["resilio-sync"],
+      "ubus": { "resilio-sync": ["set_password"] }
+    }
   }
 }

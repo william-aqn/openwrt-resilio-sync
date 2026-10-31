@@ -14,7 +14,8 @@ jobs:
         run: |
           find resilio-sync/files scripts tests -type f ! -name '*.conf' ! -name '*.config' ! -name '*.py' ! -name '*.c' -print0 | xargs -0 -n1 sh -n
           sh tests/test_validation.sh
-          shellcheck -s sh -e SC1091,SC2034,SC2317 resilio-sync/files/common.sh resilio-sync/files/rslsync resilio-sync/files/resilio-sync-runtime resilio-sync/files/resilio-sync-setup resilio-sync/files/resilio-sync-config scripts/*.sh tests/*.sh
+          python3 tests/test_password.py
+          shellcheck -s sh -e SC1091,SC2034,SC2317 resilio-sync/files/common.sh resilio-sync/files/rslsync resilio-sync/files/resilio-sync-runtime resilio-sync/files/resilio-sync-setup resilio-sync/files/resilio-sync-password resilio-sync/files/resilio-sync-config scripts/*.sh tests/*.sh
           node --check luci-app-resilio-sync/htdocs/luci-static/resources/view/resilio-sync/settings.js
       - name: Check metadata and source hygiene
         run: python3 tests/check_sources.py

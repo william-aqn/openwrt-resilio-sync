@@ -1,6 +1,6 @@
 # Validation record
 
-Dates: 2026-10-29–30. This is an experimental integration, not a claim of official
+Dates: 2026-10-29–31. This is an experimental integration, not a claim of official
 OpenWrt support or production reliability.
 
 ## Environment
@@ -11,8 +11,8 @@ OpenWrt support or production reliability.
 - External ext4 filesystem mounted by UUID; a USB hardware RAID1 enclosure.
 - Resilio Sync 3.1.2 (1076). Initial tests used Debian libraries; on 2026-10-30
   the service migrated to source-built GNU glibc 2.44 and libxcrypt 4.5.2.
-- Installed integration: `resilio-sync` 1.1.0-r1 and `luci-app-resilio-sync`
-  1.0.0-r2. See [native runtime validation](NATIVE-RUNTIME.md) for migration
+- Installed integration: `resilio-sync` 1.1.0-r2 and `luci-app-resilio-sync`
+  1.0.0-r3. See [native runtime validation](NATIVE-RUNTIME.md) for migration
   checks and the limits of the new runtime's test coverage.
 
 ## Passed
@@ -52,6 +52,27 @@ OpenWrt support or production reliability.
 
 ## Findings fixed during hardware validation
 
+### LuCI password reset (2026-10-31)
+
+- Both updated integration APKs built with the matching 25.12.5 SDK and
+  installed on Flint 2. Existing UCI settings, certificates and network
+  configuration were preserved.
+- Nine isolated helper tests cover validation, SHA-512 crypt verification,
+  mode 0600, stopped/running services, concurrent requests, hash-generation
+  failure and restoring the previous hash after a failed reload.
+- Nine RPC tests on the router cover invalid types, malformed JSON, short
+  values, newline/tab/NUL rejection and literal shell characters over stdin.
+  The tests use a disposable helper and never change production credentials.
+- An anonymous HTTP RPC request was denied. The installed handler reapplied
+  the existing password through SSH stdin; procd replaced the process and
+  authenticated HTTPS access returned 200 with the unchanged password.
+- Browser validation confirmed the Network tab button, password dialog and
+  rejection of an empty password. Actual password values were not entered
+  through browser automation. Password changes use a write-only RPC method;
+  ordinary UCI reads contain neither plaintext nor the password hash.
+
+### Earlier findings
+
 - The firmware does not include `stat`; setup now uses POSIX `ls -nd` to verify
   state ownership without adding another dependency.
 - Windows stdin uses CRLF. Setup now removes the terminal CR when reading a
@@ -78,8 +99,8 @@ OpenWrt support or production reliability.
 - Earlier loopback/configuration-mode attempts did not complete; an x64 WSL
   process also crashed while using `shared_folders`. The successful test used
   the GUI-managed path shipped by this integration, without `shared_folders`.
-- The LuCI resources and ACL install correctly and the JavaScript passes syntax
-  checking; interactive browser validation is still required.
+- The password dialog has been checked in the browser. Other LuCI edit flows
+  have not received a complete interactive regression test.
 - Physical unplug/replug, cold boot, long-duration operation, large libraries,
   Internet relay transfer, throughput and selective placeholders have not been
   validated. The test did not unmount or reformat the user's existing disk.
@@ -92,6 +113,7 @@ OpenWrt support or production reliability.
 ```sh
 sh tests/test_validation.sh
 python3 tests/check_sources.py
+python3 tests/test_password.py
 node --check luci-app-resilio-sync/htdocs/luci-static/resources/view/resilio-sync/settings.js
 ```
 
@@ -99,6 +121,7 @@ On a router with the package installed and an already mounted test filesystem:
 
 ```sh
 sh router-guards.sh /mnt/storage YOUR-EXT4-UUID
+sh router-password-rpc.sh
 /usr/libexec/resilio-sync-config check
 resilio-sync-runtime status
 ```

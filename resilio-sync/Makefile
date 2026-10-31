@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=resilio-sync
 PKG_VERSION:=1.1.0
-PKG_RELEASE:=1
+PKG_RELEASE:=2
 PKG_LICENSE:=MIT
 PKG_MAINTAINER:=
 
@@ -44,6 +44,7 @@ define Package/resilio-sync/install
 	$(INSTALL_BIN) ./files/rslsync $(1)/usr/bin/rslsync
 	$(INSTALL_BIN) ./files/resilio-sync-runtime $(1)/usr/sbin/resilio-sync-runtime
 	$(INSTALL_BIN) ./files/resilio-sync-setup $(1)/usr/sbin/resilio-sync-setup
+	$(INSTALL_BIN) ./files/resilio-sync-password $(1)/usr/sbin/resilio-sync-password
 	$(INSTALL_BIN) ./files/resilio-sync-config $(1)/usr/libexec/resilio-sync-config
 	$(INSTALL_DATA) ./files/common.sh $(1)/usr/lib/resilio-sync/common.sh
 	$(INSTALL_DATA) ./files/runtime.conf $(1)/usr/lib/resilio-sync/runtime.conf

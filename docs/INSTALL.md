@@ -72,6 +72,22 @@ existing credentials on subsequent runs. It never recursively changes ownership
 of an existing data tree. Passwords and keys are outside UCI, so LuCI cannot
 retrieve them through ordinary configuration reads.
 
+To reset a forgotten Web UI password, open **LuCI -> Services -> Resilio Sync ->
+Network -> Change password**. Enter the new password twice; the old password is
+not required. Use 12 to 128 printable ASCII characters. This action is immediate
+and separate from Save & Apply, so apply any username or other settings first.
+A running service reloads to use the new password; a stopped service stays
+stopped. Device identity, license, folders and TLS certificate are preserved.
+LuCI write permission for Resilio Sync is required. The password travels only in
+the authenticated RPC request and helper stdin, never in UCI or command arguments.
+Use LuCI over HTTPS or a trusted encrypted management connection.
+
+For SSH recovery, the equivalent command is
+`resilio-sync-password --password-stdin`, which reads one password line from
+stdin. Do not put the password in command arguments or shell history.
+Initial disk and certificate setup still uses `resilio-sync-setup`; rerunning
+that setup command deliberately preserves an existing password.
+
 By default, the service runs as the package's `rslsync` user. If files must also
 be writable by an existing Samba user, set `resilio-sync.main.user` to that
 non-root account **before** initial setup. Ensure it owns the new directories.
